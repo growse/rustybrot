@@ -2,34 +2,12 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-const WIDTH: u32 = 800;
-const HEIGHT: u32 = 800;
+const WIDTH: u32 = 1600;
+const HEIGHT: u32 = 1600;
 const MIN_X: f64 = -1.8;
 const MIN_Y: f64 = -1.2;
 const MAX_X: f64 = 0.7;
 const MAX_Y: f64 = 1.2;
-
-fn main() {
-    let path = Path::new(r"output.png");
-    let file = File::create(path).unwrap();
-    let ref mut w = BufWriter::new(file);
-
-    let mut encoder = png::Encoder::new(w, WIDTH, HEIGHT); // Width is 2 pixels and height is 1.
-    encoder.set_color(png::ColorType::RGBA);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().unwrap();
-
-    let data = mandelbrot(
-        Coordinate { x: MIN_X, y: MIN_Y },
-        Coordinate { x: MAX_X, y: MAX_Y },
-        WIDTH,
-        HEIGHT,
-        50,
-        1000,
-        my_colour_function,
-    );
-    writer.write_image_data(&data).unwrap(); // Save
-}
 
 struct Coordinate {
     x: f64,
@@ -96,6 +74,7 @@ fn mandelbrot(
 const BLUE_FACTOR: f32 = 1.0;
 const GREEN_FACTOR: f32 = 0.5;
 const RED_FACTOR: f32 = 0.05;
+
 fn my_colour_function(iterations: u32, threshold: u32) -> Pixel {
     let fraction = (iterations as f32) / (threshold as f32);
     Pixel {
@@ -104,4 +83,26 @@ fn my_colour_function(iterations: u32, threshold: u32) -> Pixel {
         b: (BLUE_FACTOR * fraction * 255 as f32).round() as u8,
         a: 255,
     }
+}
+
+fn main() {
+    let path = Path::new(r"output.png");
+    let file = File::create(path).unwrap();
+    let ref mut w = BufWriter::new(file);
+
+    let mut encoder = png::Encoder::new(w, WIDTH, HEIGHT); // Width is 2 pixels and height is 1.
+    encoder.set_color(png::ColorType::RGBA);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().unwrap();
+
+    let data = mandelbrot(
+        Coordinate { x: MIN_X, y: MIN_Y },
+        Coordinate { x: MAX_X, y: MAX_Y },
+        WIDTH,
+        HEIGHT,
+        25,
+        1000,
+        my_colour_function,
+    );
+    writer.write_image_data(&data).unwrap(); // Save
 }
