@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-use itertools::{Itertools};
+use itertools::Itertools;
 
 const WIDTH: u32 = 1600;
 const HEIGHT: u32 = 1600;
@@ -42,11 +42,11 @@ fn mandelbrot(
 ) -> Vec<u8> {
     let step_x = (upper_right.x - lower_left.x) / image_width as f64;
     let step_y = (upper_right.x - lower_left.x) / image_width as f64;
-    (0..image_width)
-        .cartesian_product(0..image_height)
+    (0..image_height)
+        .cartesian_product((0..image_width).rev())
         .map(|c| Coordinate {
-            x: (c.0 as f64 * step_x) + lower_left.x,
-            y: (c.1 as f64 * step_y) + lower_left.y,
+            x: (c.1 as f64 * step_x) + lower_left.x,
+            y: (c.0 as f64 * step_y) + lower_left.y,
         })
         .map(|coordinate| get_escape_iterations(coordinate, loop_threshold, escape_threshold))
         .map(|escape_iterations| {
