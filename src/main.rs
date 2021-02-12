@@ -93,12 +93,15 @@ fn mandelbrot(
         .collect();
 }
 
+const BLUE_FACTOR: f32 = 1.0;
+const GREEN_FACTOR: f32 = 0.5;
+const RED_FACTOR: f32 = 0.05;
 fn my_colour_function(iterations: u32, threshold: u32) -> Pixel {
     let fraction = (iterations as f32) / (threshold as f32);
     Pixel {
-        r: 0,
-        g: 0,
-        b: (fraction * 255 as f32).round() as u8,
+        r: (RED_FACTOR * fraction * 255 as f32).round() as u8,
+        g: (GREEN_FACTOR * fraction * 255 as f32).round() as u8,
+        b: (BLUE_FACTOR * fraction * 255 as f32).round() as u8,
         a: 255,
     }
 }
