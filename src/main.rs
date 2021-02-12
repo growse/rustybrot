@@ -4,10 +4,10 @@ use std::path::Path;
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 800;
-const MIN_X: f64 = -2.0;
-const MIN_Y: f64 = -2.0;
-const MAX_X: f64 = 2.0;
-const MAX_Y: f64 = 2.0;
+const MIN_X: f64 = -1.8;
+const MIN_Y: f64 = -1.2;
+const MAX_X: f64 = 0.7;
+const MAX_Y: f64 = 1.2;
 
 fn main() {
     let path = Path::new(r"output.png");
