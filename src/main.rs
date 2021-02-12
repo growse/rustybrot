@@ -94,10 +94,11 @@ fn mandelbrot(
 }
 
 fn my_colour_function(iterations: u32, threshold: u32) -> Pixel {
+    let fraction = (iterations as f32) / (threshold as f32);
     Pixel {
-        r: 255,
-        g: 255,
-        b: 255,
+        r: 0,
+        g: 0,
+        b: (fraction * 255 as f32).round() as u8,
         a: 255,
     }
 }
