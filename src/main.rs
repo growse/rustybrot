@@ -2,12 +2,22 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
+use itertools::{Itertools};
+
 const WIDTH: u32 = 1600;
 const HEIGHT: u32 = 1600;
 const MIN_X: f64 = -1.8;
 const MIN_Y: f64 = -1.2;
 const MAX_X: f64 = 0.7;
 const MAX_Y: f64 = 1.2;
+const ESCAPE_THRESHOLD: u32 = 25;
+const LOOP_THRESHOLD: u32 = 1000;
+const SET_PIXEL: Pixel = Pixel {
+    r: 0,
+    g: 0,
+    b: 0,
+    a: 255,
+};
 
 struct Coordinate {
     x: f64,
@@ -30,45 +40,49 @@ fn mandelbrot(
     loop_threshold: u32,
     colour_function: fn(u32, u32) -> Pixel,
 ) -> Vec<u8> {
-    let mut pixels: Vec<Pixel> = Vec::with_capacity((image_width * image_height) as usize);
     let step_x = (upper_right.x - lower_left.x) / image_width as f64;
     let step_y = (upper_right.x - lower_left.x) / image_width as f64;
-    for x in 0..image_width as usize {
-        for y in 0..image_height as usize {
-            let cr = (x as f64 * step_x) + lower_left.x;
-            let ci = (y as f64 * step_y) + lower_left.y;
-            let mut zr = cr;
-            let mut zi = ci;
-            let mut counter = 0;
-            let escape_iterations = loop {
-                counter += 1;
-                let temp_zr = zr;
-                zr = ((zr * zr) - (zi * zi)) + cr;
-                zi = (2.0 * temp_zr * zi) + ci;
-                let abs = ((zr * zr) + (zi * zi)).sqrt();
-                if abs > escape_threshold as f64 {
-                    break counter;
-                }
-                if counter > loop_threshold {
-                    break counter;
-                }
-            };
+    (0..image_width)
+        .cartesian_product(0..image_height)
+        .map(|c| Coordinate {
+            x: (c.0 as f64 * step_x) + lower_left.x,
+            y: (c.1 as f64 * step_y) + lower_left.y,
+        })
+        .map(|coordinate| get_escape_iterations(coordinate, loop_threshold, escape_threshold))
+        .map(|escape_iterations| {
             if escape_iterations > loop_threshold {
-                pixels.push(Pixel {
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 255,
-                });
+                SET_PIXEL
             } else {
-                pixels.push(colour_function(escape_iterations, escape_threshold))
+                colour_function(escape_iterations, escape_threshold)
             }
+        })
+        .flat_map(|p| vec![p.r, p.g, p.b, p.a])
+        .collect()
+}
+
+fn get_escape_iterations(
+    coordinate: Coordinate,
+    loop_threshold: u32,
+    escape_threshold: u32,
+) -> u32 {
+    let cr = coordinate.x;
+    let ci = coordinate.y;
+    let mut zr = cr;
+    let mut zi = ci;
+    let mut counter = 0;
+    loop {
+        counter += 1;
+        let temp_zr = zr;
+        zr = ((zr * zr) - (zi * zi)) + cr;
+        zi = (2.0 * temp_zr * zi) + ci;
+        let abs = ((zr * zr) + (zi * zi)).sqrt();
+        if abs > escape_threshold as f64 {
+            break counter;
+        }
+        if counter > loop_threshold {
+            break counter;
         }
     }
-    return pixels
-        .iter()
-        .flat_map(|p| vec![p.r, p.g, p.b, p.a])
-        .collect();
 }
 
 const BLUE_FACTOR: f32 = 1.0;
@@ -100,8 +114,8 @@ fn main() {
         Coordinate { x: MAX_X, y: MAX_Y },
         WIDTH,
         HEIGHT,
-        25,
-        1000,
+        ESCAPE_THRESHOLD,
+        LOOP_THRESHOLD,
         my_colour_function,
     );
     writer.write_image_data(&data).unwrap(); // Save
