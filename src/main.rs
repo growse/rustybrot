@@ -1,4 +1,8 @@
-use pixels::{Error, Pixels, SurfaceTexture};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+use pixels::{Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -11,6 +15,8 @@ use crate::pixel::{Pixel, SET_PIXEL};
 mod mandelbrot;
 mod pixel;
 
+type R<T> = anyhow::Result<T>;
+
 const WIDTH: u32 = 500;
 const HEIGHT: u32 = 500;
 const LOWER_LEFT: Coordinate = Coordinate { x: -1.8, y: -1.2 };
@@ -22,14 +28,12 @@ const BLUE_FACTOR: f32 = 1.0;
 const GREEN_FACTOR: f32 = 0.5;
 const RED_FACTOR: f32 = 0.05;
 
-const PIXELS_PER_FRAME: u32 = 10000;
-
 fn my_colour_function(iterations: u32, threshold: u32) -> Pixel {
     let fraction = (iterations as f32) / (threshold as f32);
     Pixel {
-        r: (RED_FACTOR * fraction * 255 as f32).round() as u8,
-        g: (GREEN_FACTOR * fraction * 255 as f32).round() as u8,
-        b: (BLUE_FACTOR * fraction * 255 as f32).round() as u8,
+        r: (RED_FACTOR * fraction * 255_f32).round() as u8,
+        g: (GREEN_FACTOR * fraction * 255_f32).round() as u8,
+        b: (BLUE_FACTOR * fraction * 255_f32).round() as u8,
         a: 255,
     }
 }
@@ -37,13 +41,13 @@ fn my_colour_function(iterations: u32, threshold: u32) -> Pixel {
 struct MandelbrotState {
     width: u32,
     height: u32,
-    pixels: Vec<Vec<Pixel>>,
-    pointer: u32,
+    canvas: Vec<Vec<Pixel>>,
     loop_threshold: u32,
     escape_threshold: u32,
     lower_left: Coordinate,
     step_x: f64,
     step_y: f64,
+    last_rendered: u32,
 }
 
 impl MandelbrotState {
@@ -60,48 +64,44 @@ impl MandelbrotState {
         Self {
             width,
             height,
-            pixels: vec![vec![SET_PIXEL; HEIGHT as usize]; WIDTH as usize],
-            pointer: 0,
+            canvas: vec![vec![SET_PIXEL; height as usize]; width as usize],
             loop_threshold,
             escape_threshold,
             lower_left,
             step_x,
             step_y,
+            last_rendered: 0,
         }
     }
-    fn draw_next_frame(&mut self) {
-        for p in self.pointer..(self.pointer + PIXELS_PER_FRAME) {
-            self.pointer = p;
-            if self.pointer >= self.width * self.height {
-                return;
-            }
-            let x = (self.pointer % self.width) as usize;
-            let y = (self.pointer / self.width) as usize;
-            let coordinate = Coordinate {
-                x: (x as f64 * self.step_x) + self.lower_left.x,
-                y: (y as f64 * self.step_y) + self.lower_left.y,
-            };
-            let escape_iterations =
-                get_escape_iterations(coordinate, self.loop_threshold, self.escape_threshold);
-            self.pixels[x][y] = if escape_iterations > self.loop_threshold {
-                SET_PIXEL
-            } else {
-                my_colour_function(escape_iterations, self.escape_threshold)
-            };
-        }
+    fn render_next(&mut self) {
+        let x = (self.last_rendered % self.width) as usize;
+        let y = (self.last_rendered / self.width) as usize;
+        let coordinate = Coordinate {
+            x: (x as f64 * self.step_x) + self.lower_left.x,
+            y: (y as f64 * self.step_y) + self.lower_left.y,
+        };
+        let escape_iterations =
+            get_escape_iterations(coordinate, self.loop_threshold, self.escape_threshold);
+        self.canvas[x][y] = if escape_iterations > self.loop_threshold {
+            SET_PIXEL
+        } else {
+            my_colour_function(escape_iterations, self.escape_threshold)
+        };
+        self.last_rendered += 1;
     }
+
     fn draw(&self, frame: &mut [u8]) {
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
             // The mandelbrot uses positive-right, whereas pixels uses positive-left, so we have to flip
             let x = (WIDTH - 1) as usize - (i % WIDTH as usize);
             let y = i / WIDTH as usize;
-            let rgba = self.pixels[x][y].to_slice();
+            let rgba = self.canvas[x][y].to_slice();
             pixel.copy_from_slice(&rgba);
         }
     }
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> R<()> {
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
@@ -120,19 +120,27 @@ fn main() -> Result<(), Error> {
         Pixels::new(WIDTH, HEIGHT, surface_texture)?
     };
 
-    let mut mandelbrot = MandelbrotState::new(
+    let mandelbrot = Arc::new(Mutex::new(MandelbrotState::new(
         WIDTH,
         HEIGHT,
         LOOP_THRESHOLD,
         ESCAPE_THRESHOLD,
         LOWER_LEFT,
         UPPER_RIGHT,
-    );
+    )));
 
+    let workerbrot = Arc::clone(&mandelbrot);
+    thread::spawn(move || {
+        for _ in 0..WIDTH * HEIGHT {
+            workerbrot.lock().unwrap().render_next()
+        }
+    });
+
+    // join_handle.join();
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            mandelbrot.draw(pixels.get_frame());
+            mandelbrot.lock().unwrap().draw(pixels.get_frame());
             if pixels
                 .render()
                 .map_err(|e| println!("pixels.render() failed: {:?}", e))
@@ -157,7 +165,6 @@ fn main() -> Result<(), Error> {
             }
 
             // Update internal state and request a redraw
-            mandelbrot.draw_next_frame();
             window.request_redraw();
         }
     });
